@@ -2,13 +2,20 @@ import socket
 import _thread as thread
 import mimetypes
 import os.path
+import time
+
+TAB = b'\t'.decode("utf-8")
+CRLF = b'\r\n'.decode("utf-8")
+LF = b'\n'.decode("utf-8")
 
 CONFIGURATION = { 
 	'HOST' : '127.0.0.1' , 
 	'PORT' : 31338 , 
 	'MAX_REQUEST' : 1024 * 2,  # 2 MB
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
-	'HTTP_VERSION' : 'HTTP/1.0'
+	'HTTP_VERSION' : 'HTTP/1.0',
+	'MESSAGES_PATH' : 'messages', # use full path
+	'SERVER' : 'patsy/0.1'
 }
 
 STATUS_CODES = {
@@ -42,43 +49,73 @@ def handleGet(clientSocket, address, target, headers):
 	#print("INTO GET!")
 	#print("**START**")
 	uri = getUriName(target)
-	retmsg = """HTTP/1.0 200 OK
-Date: Fri, 31 Dec 1999 23:59:59 GMT
-Content-Type: text/html
-
-THIS IS A FULL MESSAGE
-"""
-	filePath, mime, status = getResource(target)
+	retHeaders = {}
+	status, ftype, filePath, mime = getResource(target)
 	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
-	clientSocket.send(b'\n')
-	clientSocket.send(bytes("Content-Type: "+mime,'utf-8'))
-	clientSocket.send(b'\r\n\n')
-	if mime[:4] == "text":
-		with open(filePath, 'r') as f:
-			for line in f:
-				clientSocket.send(bytes(line,'utf-8'))
+	sendGenericHeaders(clientSocket)
+	if status == STATUS_CODES['OK'] and ftype:
+		# SEND A (TEXT OR BINARY) FILE - NO ERROR
+		clientSocket.send(b'\n')
+		clientSocket.send(bytes("Content-Type: "+mime,'utf-8'))
+		sendMessageBody(clientSocket, status, filePath, mime, ftype)
+	elif status == STATUS_CODES['OK']:
+		# DIRECTORY LISTING
+		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
 	else:
-		with open(filePath, 'rb') as f:
-			for line in f:
-				clientSocket.send(line)
+		# SOME KIND OF ERROR OR STATUS CODE
+		print("ERROR")
+		sendStatusBody(clientSocket, status, filePath)
 	clientSocket.send(b'\r\n')
 	#print("**END**")
 
 def getUriName(target):
 	# TO IMPLEMENT
 	return target
-	
+
 def getResource(uri):
 	# return mime type and file descriptor
 	filePath = CONFIGURATION['DOCUMENT_ROOT']+getUriName(uri)
 	status = STATUS_CODES['OK']
 	mime = 'text/html'
-	(a, b) = mimetypes.guess_type(uri)
-	mime = a
+	ftype = True
 	if not (os.path.isfile(filePath) or os.path.isdir(filePath)):
 		status = STATUS_CODES['NOT_FOUND']
+		filePath = CONFIGURATION['MESSAGES_PATH']+'/404.html'
+	elif os.path.isdir(filePath):
+		#it's a dir, return file listing
+		mime = 'text/html'
+		ftype = False	
+	else:
+		(a, b) = mimetypes.guess_type(uri)
+		mime = a
 	#fileD = open(CONFIGURATION['DOCUMENT_ROOT']+uri, 'r')
-	return  filePath, mime, status
+	return  status, ftype, filePath, mime
+
+def sendGenericHeaders(socket):
+	socket.send(b'\n')
+	socket.send(bytes("Date: "+time.strftime("%a, %m %b %Y %H:%M:%S %Z", time.gmtime()),'utf-8'))
+	socket.send(b'\n')
+	socket.send(bytes("Server: "+CONFIGURATION['SERVER'],'utf-8'))
+
+def sendSpecialHeaders(socket, headers):
+	for header in headers:
+		socket.send(b'\n')
+		socket.send(bytes("BLA: "+header,'utf-8'))
+
+def sendMessageBody(socket, status, path, mime, ftype):
+	socket.send(b'\r\n\n')
+	if mime[:4] == "text":
+		with open(path, 'r') as f: # read sas utf-8 , not default!
+			for line in f:
+				socket.send(bytes(line,'utf-8'))
+	else:
+		with open(path, 'rb') as f:
+			for line in f:
+				socket.send(line)
+
+def sendStatusBody(socket, status, originalFilePath):
+	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
+	sendMessageBody(socket, status, filePath, "text/html", 1)
 
 requestHandler = {
 	'GET' : handleGet
