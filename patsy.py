@@ -10,8 +10,8 @@ CRLF = b'\r\n'.decode("utf-8")
 LF = b'\n'.decode("utf-8")
 
 CONFIGURATION = { 
-	'HOST' : '127.0.0.1', 
-	'PORT' : 31338, 
+	'HOST' : '192.168.1.2', # set to machine ip
+	'PORT' : 31338,
 	'MAX_REQUEST' : 1024 * 2,  # 2 MB
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
 	'HTTP_VERSION' : 'HTTP/1.0',
@@ -28,6 +28,7 @@ STATUS_CODES = {
 }
 
 def handleRequest(clientSocket, address):
+	print(address)
 	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode("utf-8")
 	lines = list(request.splitlines())
 	method = ""
@@ -44,6 +45,7 @@ def handleRequest(clientSocket, address):
 			#print("LINE : "+lines[i])
 			header, value = lines[i].split(':',1)
 			headers[header.strip()] = value.strip()
+			print('HEADER -> '+header.strip()+' '+headers[header.strip()])
 			#print("header "+header+" "+headers[header])
 		elif lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8"):
 			break
@@ -55,9 +57,10 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	uri = getUriName(target)
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
+	fullFilePath = CONFIGURATION['DOCUMENT_ROOT']+filePath
 	if status == STATUS_CODES['OK']:
 		try:
-			lastModTime = time.gmtime(os.path.getmtime(filePath))
+			lastModTime = time.gmtime(os.path.getmtime(fullFilePath))
 			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], "%a, %m %b %Y %H:%M:%S %Z"))		
 			if modSinceTime > time.mktime(lastModTime):
 				status = STATUS_CODES['NOT_MODIFIED']
@@ -68,11 +71,11 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	if status == STATUS_CODES['OK'] and ftype:
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
 		retHeaders['Content-Type'] = mime
-		retHeaders['Content-Length'] = os.path.getsize(filePath)
+		retHeaders['Content-Length'] = os.path.getsize(fullFilePath)
 		retHeaders['Last-Modified'] = time.strftime("%a, %m %b %Y %H:%M:%S %Z", lastModTime)
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
-			sendMessageBody(clientSocket, status, filePath, mime, ftype)
+			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
@@ -83,10 +86,10 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		if not onlyHead:
 			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html') # in future, wrong cause of substitutions!
 		if status[0] == '2' or status[0] == '3':
-			retHeaders['Location'] = filePath
+			retHeaders['Location'] = headers['Host']+filePath
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
-			sendStatusBody(clientSocket, status, filePath)
+			sendStatusBody(clientSocket, status, fullFilePath)
 	clientSocket.send(b'\r\n')
 	#print("**END**")
 
@@ -102,21 +105,22 @@ def getUriName(target):
 
 def getResource(uri):
 	# return mime type and file descriptor
-	filePath = CONFIGURATION['DOCUMENT_ROOT']+getUriName(uri)
+	filePath = getUriName(uri)
+	tmpPath = CONFIGURATION['DOCUMENT_ROOT']+getUriName(uri)
 	status = STATUS_CODES['OK']
 	mime = 'text/html'
 	ftype = True	
-	if filePath[-1] != '/' and os.path.isdir(filePath):
+	if tmpPath[-1] != '/' and os.path.isdir(tmpPath):
 		# it's a dir -> move to path/
 		print("GET RESOURCE IN HERE!")
 		mime = 'text/html'
 		ftype = False
 		status = STATUS_CODES['MOVED_PERMANENTLY']
 		filePath = filePath+'/'
-	elif not (os.path.isfile(filePath) or os.path.isdir(filePath)):
+	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
 		print("GET RESOURCE IN HERE!")
 		status = STATUS_CODES['NOT_FOUND']
-	elif os.path.isdir(filePath):
+	elif os.path.isdir(tmpPath):
 		#it's a dir, return file listing
 		mime = 'text/html'
 		ftype = False
@@ -165,7 +169,6 @@ if __name__ == '__main__':
 	server.bind((CONFIGURATION['HOST'], CONFIGURATION['PORT']))
 	server.listen(5)
 	server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-	
 	# main loop that accepts http requests
 	while True:
 		#print("** LOOP **")
