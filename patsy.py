@@ -46,7 +46,7 @@ def handleRequest(clientSocket, address):
 			break
 	requestHandler[method](clientSocket, address, target, headers)
 		
-def handleGet(clientSocket, address, target, headers):
+def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	#print("INTO GET!")
 	#print("**START**")
 	uri = getUriName(target)
@@ -59,37 +59,21 @@ def handleGet(clientSocket, address, target, headers):
 		retHeaders['Content-Type'] = mime
 		retHeaders['Content-Length'] = os.path.getsize(filePath)
 		sendSpecialHeaders(clientSocket, retHeaders)
-		sendMessageBody(clientSocket, status, filePath, mime, ftype)
+		if not onlyHead:
+			sendMessageBody(clientSocket, status, filePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
 	else:
 		# SOME KIND OF ERROR OR STATUS CODE
 		print("ERROR")
-		sendStatusBody(clientSocket, status, filePath)
+		if not onlyHead:
+			sendStatusBody(clientSocket, status, filePath)
 	clientSocket.send(b'\r\n')
 	#print("**END**")
 
 def handleHead(clientSocket, address, target, headers):
-	uri = getUriName(target)
-	retHeaders = {}
-	status, ftype, filePath, mime = getResource(target)
-	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
-	sendGenericHeaders(clientSocket)
-	if status == STATUS_CODES['OK'] and ftype:
-		# SEND A (TEXT OR BINARY) FILE - NO ERROR
-		retHeaders['Content-Type'] = mime
-		retHeaders['Content-Length'] = os.path.getsize(filePath)
-		sendSpecialHeaders(clientSocket, retHeaders)
-		#sendMessageBody(clientSocket, status, filePath, mime, ftype)
-	elif status == STATUS_CODES['OK']:
-		# DIRECTORY LISTING
-		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
-	else:
-		# SOME KIND OF ERROR OR STATUS CODE
-		print("ERROR")
-		#sendStatusBody(clientSocket, status, filePath)
-	clientSocket.send(b'\r\n')
+	handleGet(clientSocket, address, target, headers, True)
 
 def getUriName(target):
 	# TO IMPLEMENT
@@ -140,8 +124,6 @@ requestHandler = {
 }
 
 if __name__ == '__main__':
-	# initialize document root
-	
 	# initialize server socket
 	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	server.bind((CONFIGURATION['HOST'], CONFIGURATION['PORT']))
