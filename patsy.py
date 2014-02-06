@@ -1,3 +1,4 @@
+# An HTTP 1.0 webserver
 import socket
 import _thread as thread
 import mimetypes
@@ -55,8 +56,9 @@ def handleGet(clientSocket, address, target, headers):
 	sendGenericHeaders(clientSocket)
 	if status == STATUS_CODES['OK'] and ftype:
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
-		clientSocket.send(b'\n')
-		clientSocket.send(bytes("Content-Type: "+mime,'utf-8'))
+		retHeaders['Content-Type'] = mime
+		retHeaders['Content-Length'] = os.path.getsize(filePath)
+		sendSpecialHeaders(clientSocket, retHeaders)
 		sendMessageBody(clientSocket, status, filePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
@@ -67,6 +69,27 @@ def handleGet(clientSocket, address, target, headers):
 		sendStatusBody(clientSocket, status, filePath)
 	clientSocket.send(b'\r\n')
 	#print("**END**")
+
+def handleHead(clientSocket, address, target, headers):
+	uri = getUriName(target)
+	retHeaders = {}
+	status, ftype, filePath, mime = getResource(target)
+	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
+	sendGenericHeaders(clientSocket)
+	if status == STATUS_CODES['OK'] and ftype:
+		# SEND A (TEXT OR BINARY) FILE - NO ERROR
+		retHeaders['Content-Type'] = mime
+		retHeaders['Content-Length'] = os.path.getsize(filePath)
+		sendSpecialHeaders(clientSocket, retHeaders)
+		#sendMessageBody(clientSocket, status, filePath, mime, ftype)
+	elif status == STATUS_CODES['OK']:
+		# DIRECTORY LISTING
+		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
+	else:
+		# SOME KIND OF ERROR OR STATUS CODE
+		print("ERROR")
+		#sendStatusBody(clientSocket, status, filePath)
+	clientSocket.send(b'\r\n')
 
 def getUriName(target):
 	# TO IMPLEMENT
@@ -80,7 +103,6 @@ def getResource(uri):
 	ftype = True
 	if not (os.path.isfile(filePath) or os.path.isdir(filePath)):
 		status = STATUS_CODES['NOT_FOUND']
-		filePath = CONFIGURATION['MESSAGES_PATH']+'/404.html'
 	elif os.path.isdir(filePath):
 		#it's a dir, return file listing
 		mime = 'text/html'
@@ -98,27 +120,23 @@ def sendGenericHeaders(socket):
 	socket.send(bytes("Server: "+CONFIGURATION['SERVER'],'utf-8'))
 
 def sendSpecialHeaders(socket, headers):
-	for header in headers:
+	for k, v in headers.items():
 		socket.send(b'\n')
-		socket.send(bytes("BLA: "+header,'utf-8'))
+		socket.send(bytes(k+" : "+str(v),'utf-8'))
 
 def sendMessageBody(socket, status, path, mime, ftype):
 	socket.send(b'\r\n\n')
-	if mime[:4] == "text":
-		with open(path, 'r') as f: # read sas utf-8 , not default!
-			for line in f:
-				socket.send(bytes(line,'utf-8'))
-	else:
-		with open(path, 'rb') as f:
-			for line in f:
-				socket.send(line)
+	with open(path, 'rb') as f:
+		for line in f:
+			socket.send(line)
 
 def sendStatusBody(socket, status, originalFilePath):
 	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
 	sendMessageBody(socket, status, filePath, "text/html", 1)
 
 requestHandler = {
-	'GET' : handleGet
+	'GET' : handleGet,
+	'HEAD' : handleHead
 }
 
 if __name__ == '__main__':
