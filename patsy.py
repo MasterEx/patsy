@@ -23,6 +23,7 @@ CONFIGURATION = {
 STATUS_CODES = {
 	'OK' : '200 OK',
 	'NOT_FOUND' : '404 Not Found',
+	'MOVED_PERMANENTLY' : '301 Moved Permanently',
 	'NOT_MODIFIED' : '304 Not Modified'
 }
 
@@ -54,13 +55,14 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	uri = getUriName(target)
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
-	try:
-		lastModTime = time.gmtime(os.path.getmtime(filePath))
-		modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], "%a, %m %b %Y %H:%M:%S %Z"))		
-		if modSinceTime > time.mktime(lastModTime):
-			status = STATUS_CODES['NOT_MODIFIED']
-	except KeyError:
-		print('NOT IF MOD SINCE')
+	if status == STATUS_CODES['OK']:
+		try:
+			lastModTime = time.gmtime(os.path.getmtime(filePath))
+			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], "%a, %m %b %Y %H:%M:%S %Z"))		
+			if modSinceTime > time.mktime(lastModTime):
+				status = STATUS_CODES['NOT_MODIFIED']
+		except KeyError:
+			print('NOT IF MOD SINCE')
 	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
 	sendGenericHeaders(clientSocket)
 	if status == STATUS_CODES['OK'] and ftype:
@@ -79,7 +81,9 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		print("ERROR")
 		retHeaders['Content-Type'] = mime
 		if not onlyHead:
-			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html')
+			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html') # in future, wrong cause of substitutions!
+		if status[0] == '2' or status[0] == '3':
+			retHeaders['Location'] = filePath
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, filePath)
@@ -101,13 +105,21 @@ def getResource(uri):
 	filePath = CONFIGURATION['DOCUMENT_ROOT']+getUriName(uri)
 	status = STATUS_CODES['OK']
 	mime = 'text/html'
-	ftype = True
-	if not (os.path.isfile(filePath) or os.path.isdir(filePath)):
+	ftype = True	
+	if filePath[-1] != '/' and os.path.isdir(filePath):
+		# it's a dir -> move to path/
+		print("GET RESOURCE IN HERE!")
+		mime = 'text/html'
+		ftype = False
+		status = STATUS_CODES['MOVED_PERMANENTLY']
+		filePath = filePath+'/'
+	elif not (os.path.isfile(filePath) or os.path.isdir(filePath)):
+		print("GET RESOURCE IN HERE!")
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(filePath):
 		#it's a dir, return file listing
 		mime = 'text/html'
-		ftype = False	
+		ftype = False
 	else:
 		(a, b) = mimetypes.guess_type(uri)
 		mime = a
