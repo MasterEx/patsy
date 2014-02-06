@@ -58,6 +58,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
 		retHeaders['Content-Type'] = mime
 		retHeaders['Content-Length'] = os.path.getsize(filePath)
+		retHeaders['Last-Modified'] = time.strftime("%a, %m %b %Y %H:%M:%S %Z", time.gmtime(os.path.getmtime(filePath)))
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendMessageBody(clientSocket, status, filePath, mime, ftype)
@@ -67,6 +68,9 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	else:
 		# SOME KIND OF ERROR OR STATUS CODE
 		print("ERROR")
+		retHeaders['Content-Type'] = mime
+		retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html')
+		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, filePath)
 	clientSocket.send(b'\r\n')
