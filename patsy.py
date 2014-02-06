@@ -78,7 +78,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		# SOME KIND OF ERROR OR STATUS CODE
 		print("ERROR")
 		retHeaders['Content-Type'] = mime
-		retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html')
+		if not onlyHead:
+			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html')
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, filePath)
