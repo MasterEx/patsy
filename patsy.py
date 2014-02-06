@@ -16,7 +16,8 @@ CONFIGURATION = {
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
 	'HTTP_VERSION' : 'HTTP/1.0',
 	'MESSAGES_PATH' : 'messages', # use full path
-	'SERVER' : 'patsy/0.1'
+	'SERVER' : 'patsy/0.1',
+	'FROM' : '' # if empty or None don't send
 }
 
 STATUS_CODES = {
@@ -78,6 +79,9 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 
 def handleHead(clientSocket, address, target, headers):
 	handleGet(clientSocket, address, target, headers, True)
+	
+def handlePost(clientSocket, address, target, headers):
+	print("POST NOT YET IMPLEMENTED")
 
 def getUriName(target):
 	# TO IMPLEMENT
@@ -106,6 +110,12 @@ def sendGenericHeaders(socket):
 	socket.send(bytes("Date: "+time.strftime("%a, %m %b %Y %H:%M:%S %Z", time.gmtime()),'utf-8'))
 	socket.send(b'\n')
 	socket.send(bytes("Server: "+CONFIGURATION['SERVER'],'utf-8'))
+	try:
+		if not (CONFIGURATION['FROM'] == None or CONFIGURATION['FROM'] == ''):
+			socket.send(b'\n')
+			socket.send(bytes("From: "+CONFIGURATION['FROM'],'utf-8'))
+	except KeyError:
+		print("CONFIGURATION['FROM'] not defined")
 
 def sendSpecialHeaders(socket, headers):
 	for k, v in headers.items():
@@ -124,7 +134,8 @@ def sendStatusBody(socket, status, originalFilePath):
 
 requestHandler = {
 	'GET' : handleGet,
-	'HEAD' : handleHead
+	'HEAD' : handleHead,
+	'POST' : handlePost
 }
 
 if __name__ == '__main__':
