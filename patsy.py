@@ -10,8 +10,8 @@ CRLF = b'\r\n'.decode("utf-8")
 LF = b'\n'.decode("utf-8")
 
 CONFIGURATION = { 
-	'HOST' : '127.0.0.1' , 
-	'PORT' : 31338 , 
+	'HOST' : '127.0.0.1', 
+	'PORT' : 31338, 
 	'MAX_REQUEST' : 1024 * 2,  # 2 MB
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
 	'HTTP_VERSION' : 'HTTP/1.0',
@@ -22,7 +22,8 @@ CONFIGURATION = {
 
 STATUS_CODES = {
 	'OK' : '200 OK',
-	'NOT_FOUND' : '404 Not Found'
+	'NOT_FOUND' : '404 Not Found',
+	'NOT_MODIFIED' : '304 Not Modified'
 }
 
 def handleRequest(clientSocket, address):
@@ -41,7 +42,7 @@ def handleRequest(clientSocket, address):
 		elif not (lines[i] == '' or lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8")):
 			#print("LINE : "+lines[i])
 			header, value = lines[i].split(':',1)
-			headers[header] = value
+			headers[header.strip()] = value.strip()
 			#print("header "+header+" "+headers[header])
 		elif lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8"):
 			break
@@ -53,20 +54,27 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	uri = getUriName(target)
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
+	try:
+		lastModTime = time.gmtime(os.path.getmtime(filePath))
+		modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], "%a, %m %b %Y %H:%M:%S %Z"))		
+		if modSinceTime > time.mktime(lastModTime):
+			status = STATUS_CODES['NOT_MODIFIED']
+	except KeyError:
+		print('NOT IF MOD SINCE')
 	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
 	sendGenericHeaders(clientSocket)
 	if status == STATUS_CODES['OK'] and ftype:
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
 		retHeaders['Content-Type'] = mime
 		retHeaders['Content-Length'] = os.path.getsize(filePath)
-		retHeaders['Last-Modified'] = time.strftime("%a, %m %b %Y %H:%M:%S %Z", time.gmtime(os.path.getmtime(filePath)))
+		retHeaders['Last-Modified'] = time.strftime("%a, %m %b %Y %H:%M:%S %Z", lastModTime)
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendMessageBody(clientSocket, status, filePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
-	else:
+	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
 		print("ERROR")
 		retHeaders['Content-Type'] = mime
