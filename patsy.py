@@ -2,7 +2,7 @@
 import socket
 import _thread as thread
 import mimetypes
-import os.path
+import os
 import time
 
 TAB = b'\t'.decode("utf-8")
@@ -12,7 +12,7 @@ LF = b'\n'.decode("utf-8")
 CONFIGURATION = { 
 	'HOST' : '192.168.1.2', # set to machine ip
 	'PORT' : 31338,
-	'MAX_REQUEST' : 1024 * 2,  # 2 MB
+	'MAX_REQUEST' : 1024 * 1,  # 1 MB, more than enough!
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
 	'HTTP_VERSION' : 'HTTP/1.0',
 	'MESSAGES_PATH' : 'messages', # use full path
@@ -79,6 +79,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
+		retHeaders['Content-Type'] = 'text/html'
+		sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
 		print("ERROR")
@@ -149,6 +151,9 @@ def sendSpecialHeaders(socket, headers):
 
 def sendMessageBody(socket, status, path, mime, ftype):
 	socket.send(b'\r\n\n')
+	sendBinaryFile(socket, path)
+			
+def sendBinaryFile(socket, path):
 	with open(path, 'rb') as f:
 		for line in f:
 			socket.send(line)
@@ -156,6 +161,20 @@ def sendMessageBody(socket, status, path, mime, ftype):
 def sendStatusBody(socket, status, originalFilePath):
 	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
 	sendMessageBody(socket, status, filePath, "text/html", 1)
+	
+def sendDirectoryListing(socket, filePath, host):
+	socket.send(b'\r\n\n')
+	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-top.html')
+	if not filePath[-1] == '/':
+		filePath = filePath + '/'
+	if filePath != '/':
+		socket.send(bytes('<li><a href=..>PARENT DIR</a></li>','utf-8'))
+	for file in os.listdir(CONFIGURATION['DOCUMENT_ROOT']+filePath):
+		if os.path.isdir(CONFIGURATION['DOCUMENT_ROOT']+filePath+file):			
+			socket.send(bytes('<li><a href="'+file+'/">'+file+'</a></li>','utf-8'))
+		else:
+			socket.send(bytes('<li><a href="'+file+'">'+file+'</a></li>','utf-8'))
+	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-bottom.html')
 
 requestHandler = {
 	'GET' : handleGet,
