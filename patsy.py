@@ -35,19 +35,19 @@ def handleRequest(clientSocket, address):
 	target = ""
 	headers = {}
 	for i in range(0, len(lines)):
-		if method == "" and (lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8")):
+		if method == "" and (lines[i] == CRLF or lines[i] == LF):
 			continue
 		elif method == "":
-			args = lines[i].replace(b'\t'.decode("utf-8"), '').split(' ')
+			args = lines[i].replace(TAB, '').split(' ')
 			method = args[0]
 			target = args[1]
-		elif not (lines[i] == '' or lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8")):
+		elif not (lines[i] == '' or lines[i] == CRLF or lines[i] == LF):
 			#print("LINE : "+lines[i])
 			header, value = lines[i].split(':',1)
 			headers[header.strip()] = value.strip()
 			print('HEADER -> '+header.strip()+' '+headers[header.strip()])
 			#print("header "+header+" "+headers[header])
-		elif lines[i] == b'\r\n'.decode("utf-8") or lines[i] == b'\n'.decode("utf-8"):
+		elif lines[i] == CRLF or lines[i] == LF:
 			break
 	requestHandler[method](clientSocket, address, target, headers)
 		
