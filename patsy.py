@@ -24,7 +24,8 @@ STATUS_CODES = {
 	'OK' : '200 OK',
 	'NOT_FOUND' : '404 Not Found',
 	'MOVED_PERMANENTLY' : '301 Moved Permanently',
-	'NOT_MODIFIED' : '304 Not Modified'
+	'NOT_MODIFIED' : '304 Not Modified',
+	'FORBIDDEN' : '403 Forbidden'
 }
 
 def handleRequest(clientSocket, address):
@@ -66,6 +67,11 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
 			print('NOT IF MOD SINCE')
+		if not ftype:
+			try:
+				os.listdir(CONFIGURATION['DOCUMENT_ROOT']+filePath)
+			except PermissionError:
+				status = STATUS_CODES['FORBIDDEN']
 	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
 	sendGenericHeaders(clientSocket)
 	if status == STATUS_CODES['OK'] and ftype:
