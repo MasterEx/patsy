@@ -88,7 +88,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		if not onlyHead:
 			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html') # in future, wrong cause of substitutions!
 		if status[0] == '2' or status[0] == '3':
-			retHeaders['Location'] = headers['Host']+filePath
+			retHeaders['Location'] = 'http://'+headers['Host']+filePath
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, fullFilePath)
@@ -147,7 +147,7 @@ def sendGenericHeaders(socket):
 def sendSpecialHeaders(socket, headers):
 	for k, v in headers.items():
 		socket.send(b'\n')
-		socket.send(bytes(k+" : "+str(v),'utf-8'))
+		socket.send(bytes(k+": "+str(v),'utf-8'))
 
 def sendMessageBody(socket, status, path, mime, ftype):
 	socket.send(b'\r\n\n')
