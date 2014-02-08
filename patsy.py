@@ -10,7 +10,7 @@ CRLF = b'\r\n'.decode("utf-8")
 LF = b'\n'.decode("utf-8")
 
 CONFIGURATION = { 
-	'HOST' : '192.168.1.2', # set to machine ip
+	'HOST' : '0.0.0.0', # bind to all available interfaces
 	'PORT' : 31338,
 	'MAX_REQUEST' : 1024 * 1,  # 1 MB, more than enough!
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
