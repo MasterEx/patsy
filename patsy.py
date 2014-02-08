@@ -25,7 +25,8 @@ STATUS_CODES = {
 	'NOT_FOUND' : '404 Not Found',
 	'MOVED_PERMANENTLY' : '301 Moved Permanently',
 	'NOT_MODIFIED' : '304 Not Modified',
-	'FORBIDDEN' : '403 Forbidden'
+	'FORBIDDEN' : '403 Forbidden',
+	'NOT_IMPLEMENTED' : '501 Not Implemented'
 }
 
 def handleRequest(clientSocket, address):
@@ -50,7 +51,10 @@ def handleRequest(clientSocket, address):
 			#print("header "+header+" "+headers[header])
 		elif lines[i] == CRLF or lines[i] == LF:
 			break
-	requestHandler[method](clientSocket, address, target, headers)
+	try:
+		requestHandler[method](clientSocket, address, target, headers)
+	except KeyError:
+		notImplemented(clientSocket)
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	#print("INTO GET!")
@@ -181,6 +185,13 @@ def sendDirectoryListing(socket, filePath, host):
 		else:
 			socket.send(bytes('<li><a href="'+file+'">'+file+'</a></li>','utf-8'))
 	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-bottom.html')
+	
+def notImplemented(socket):
+	retHeaders = {}
+	retHeaders['Content-Type'] = 'text/html'
+	retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/501.html') # in future, wrong cause of substitutions!
+	sendSpecialHeaders(socket, retHeaders)
+	sendStatusBody(socket, STATUS_CODES['NOT_IMPLEMENTED'])
 
 requestHandler = {
 	'GET' : handleGet,
