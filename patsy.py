@@ -46,7 +46,6 @@ def handleRequest(clientSocket, address):
 		elif not (lines[i] == '' or lines[i] == CRLF or lines[i] == LF):
 			header, value = lines[i].split(':',1)
 			headers[header.strip()] = value.strip()
-			print('HEADER -> '+header.strip()+' '+headers[header.strip()])
 		elif lines[i] == CRLF or lines[i] == LF:
 			break
 	try:
@@ -55,6 +54,12 @@ def handleRequest(clientSocket, address):
 		notImplemented(clientSocket)
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
+	# parse GET url arguments
+	arguments = {}	
+	target, args = target.split('?',1)
+	for i in args.split('&'):
+		param, val = i.split('=',1)
+		arguments[param] = val
 	uri = getUriName(target)
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
