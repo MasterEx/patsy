@@ -57,10 +57,13 @@ def handleRequest(clientSocket, address):
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	# parse GET url arguments
 	arguments = {}
-	target, args = target.split('?',1)
-	for i in args.split('&'):
-		param, val = i.split('=',1)
-		arguments[param] = val
+	try:
+		target, args = target.split('?',1)
+		for i in args.split('&'):
+			param, val = i.split('=',1)
+			arguments[param] = val
+	except ValueError:
+		print('GET url doesn\'t contain arguments')
 	uri = target
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
@@ -120,7 +123,6 @@ def getResource(uri):
 	ftype = True	
 	if tmpPath[-1] != '/' and os.path.isdir(tmpPath):
 		# it's a dir -> move to path/
-		print("*******INTO FIRST BLA")
 		filePath = filePath+'/'
 		ftype = False
 		for index in CONFIGURATION['DEFAULT_INDEX']:
@@ -128,7 +130,6 @@ def getResource(uri):
 				filePath = filePath+index
 				ftype = True
 				break
-		print("GET RESOURCE IN HERE!")
 		mime = 'text/html'
 		status = STATUS_CODES['MOVED_PERMANENTLY']		
 	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
@@ -136,11 +137,9 @@ def getResource(uri):
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(tmpPath):
 		#it's a dir, return file listing
-		print("INTO SECOND BLA")
 		mime = 'text/html'
 		ftype = False
 		for index in CONFIGURATION['DEFAULT_INDEX']:
-			print('INTO LOOP '+index)
 			if os.path.isfile(tmpPath+index):
 				filePath = filePath+index
 				ftype = True
