@@ -17,7 +17,8 @@ CONFIGURATION = {
 	'HTTP_VERSION' : 'HTTP/1.0',
 	'MESSAGES_PATH' : 'messages', # use full path
 	'SERVER' : 'patsy/0.1',
-	'FROM' : '' # if empty or None don't send
+	'FROM' : '', # if empty or None don't send
+	'DEFAULT_INDEX' : ('index.html') # can specify more than one
 }
 
 STATUS_CODES = {
@@ -124,18 +125,37 @@ def getResource(uri):
 	ftype = True	
 	if tmpPath[-1] != '/' and os.path.isdir(tmpPath):
 		# it's a dir -> move to path/
+		print("*******INTO FIRST BLA")
+		filePath = filePath+'/'
+		ftype = False
+		#try:
+		for index in CONFIGURATION['DEFAULT_INDEX']:
+			if os.path.isfile(tmpPath+CONFIGURATION['DEFAULT_INDEX']):
+				filePath = filePath+CONFIGURATION['DEFAULT_INDEX']
+				ftype = True
+				break
+		#except Exception:
+		#	print('OH SOME KIND OF EXCEPTION!')
 		print("GET RESOURCE IN HERE!")
 		mime = 'text/html'
-		ftype = False
-		status = STATUS_CODES['MOVED_PERMANENTLY']
-		filePath = filePath+'/'
+		status = STATUS_CODES['MOVED_PERMANENTLY']		
 	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
 		print("GET RESOURCE IN HERE!")
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(tmpPath):
 		#it's a dir, return file listing
+		print("INTO SECOND BLA")
 		mime = 'text/html'
 		ftype = False
+		#try:
+		for index in CONFIGURATION['DEFAULT_INDEX']:
+			print('INTO LOOP')
+			if os.path.isfile(tmpPath+CONFIGURATION['DEFAULT_INDEX']):
+				filePath = filePath+CONFIGURATION['DEFAULT_INDEX']
+				ftype = True
+				break
+		#except Exception:
+		#	print('OH SOME KIND OF EXCEPTION!')
 	else:
 		(a, b) = mimetypes.guess_type(uri)
 		mime = a
@@ -158,6 +178,7 @@ def sendSpecialHeaders(socket, headers):
 	for k, v in headers.items():
 		socket.send(b'\n')
 		socket.send(bytes(k+": "+str(v),'utf-8'))
+	socket.send(b'\n')
 
 def sendMessageBody(socket, status, path, mime, ftype):
 	socket.send(b'\r\n\n')
@@ -168,7 +189,7 @@ def sendBinaryFile(socket, path):
 		for line in f:
 			socket.send(line)
 
-def sendStatusBody(socket, status, originalFilePath):
+def sendStatusBody(socket, status, originalFilePath=''):
 	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
 	sendMessageBody(socket, status, filePath, "text/html", 1)
 	
