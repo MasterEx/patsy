@@ -18,7 +18,7 @@ CONFIGURATION = {
 	'MESSAGES_PATH' : 'messages', # use full path
 	'SERVER' : 'patsy/0.1',
 	'FROM' : '', # if empty or None don't send
-	'DEFAULT_INDEX' : ('index.html') # can specify more than one
+	'DEFAULT_INDEX' : ('index.html',) # can specify more than one, live the tuple empty if don't want any
 }
 
 STATUS_CODES = {
@@ -31,7 +31,6 @@ STATUS_CODES = {
 }
 
 def handleRequest(clientSocket, address):
-	print(address)
 	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode("utf-8")
 	lines = list(request.splitlines())
 	method = ""
@@ -45,11 +44,9 @@ def handleRequest(clientSocket, address):
 			method = args[0]
 			target = args[1]
 		elif not (lines[i] == '' or lines[i] == CRLF or lines[i] == LF):
-			#print("LINE : "+lines[i])
 			header, value = lines[i].split(':',1)
 			headers[header.strip()] = value.strip()
 			print('HEADER -> '+header.strip()+' '+headers[header.strip()])
-			#print("header "+header+" "+headers[header])
 		elif lines[i] == CRLF or lines[i] == LF:
 			break
 	try:
@@ -58,8 +55,6 @@ def handleRequest(clientSocket, address):
 		notImplemented(clientSocket)
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
-	#print("INTO GET!")
-	#print("**START**")
 	uri = getUriName(target)
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
@@ -71,7 +66,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			if modSinceTime > time.mktime(lastModTime):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
-			print('NOT IF MOD SINCE')
+			print("headers['If-Modified-Since'] not defined")
 		if not ftype:
 			try:
 				os.listdir(CONFIGURATION['DOCUMENT_ROOT']+filePath)
@@ -89,12 +84,10 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
-		print("DIRECTORY LISTING NOT YET IMPLEMENTED")
 		retHeaders['Content-Type'] = 'text/html'
 		sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
-		print("ERROR")
 		retHeaders['Content-Type'] = mime
 		if not onlyHead:
 			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html') # in future, wrong cause of substitutions!
@@ -128,14 +121,11 @@ def getResource(uri):
 		print("*******INTO FIRST BLA")
 		filePath = filePath+'/'
 		ftype = False
-		#try:
 		for index in CONFIGURATION['DEFAULT_INDEX']:
-			if os.path.isfile(tmpPath+CONFIGURATION['DEFAULT_INDEX']):
-				filePath = filePath+CONFIGURATION['DEFAULT_INDEX']
+			if os.path.isfile(tmpPath+index):
+				filePath = filePath+index
 				ftype = True
 				break
-		#except Exception:
-		#	print('OH SOME KIND OF EXCEPTION!')
 		print("GET RESOURCE IN HERE!")
 		mime = 'text/html'
 		status = STATUS_CODES['MOVED_PERMANENTLY']		
@@ -147,15 +137,12 @@ def getResource(uri):
 		print("INTO SECOND BLA")
 		mime = 'text/html'
 		ftype = False
-		#try:
 		for index in CONFIGURATION['DEFAULT_INDEX']:
-			print('INTO LOOP')
-			if os.path.isfile(tmpPath+CONFIGURATION['DEFAULT_INDEX']):
-				filePath = filePath+CONFIGURATION['DEFAULT_INDEX']
+			print('INTO LOOP '+index)
+			if os.path.isfile(tmpPath+index):
+				filePath = filePath+index
 				ftype = True
 				break
-		#except Exception:
-		#	print('OH SOME KIND OF EXCEPTION!')
 	else:
 		(a, b) = mimetypes.guess_type(uri)
 		mime = a
@@ -228,5 +215,4 @@ if __name__ == '__main__':
 	server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	# main loop that accepts http requests
 	while True:
-		#print("** LOOP **")
 		thread.start_new_thread(handleRequest, server.accept())
