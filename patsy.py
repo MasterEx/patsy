@@ -8,6 +8,7 @@ import time
 TAB = b'\t'.decode("utf-8")
 CRLF = b'\r\n'.decode("utf-8")
 LF = b'\n'.decode("utf-8")
+GMT = "%a, %m %b %Y %H:%M:%S %Z"
 
 CONFIGURATION = { 
 	'HOST' : '0.0.0.0', # bind to all available interfaces
@@ -55,19 +56,19 @@ def handleRequest(clientSocket, address):
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	# parse GET url arguments
-	arguments = {}	
+	arguments = {}
 	target, args = target.split('?',1)
 	for i in args.split('&'):
 		param, val = i.split('=',1)
 		arguments[param] = val
-	uri = getUriName(target)
+	uri = target
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
 	fullFilePath = CONFIGURATION['DOCUMENT_ROOT']+filePath
 	if status == STATUS_CODES['OK']:
 		try:
 			lastModTime = time.gmtime(os.path.getmtime(fullFilePath))
-			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], "%a, %m %b %Y %H:%M:%S %Z"))		
+			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], GMT))		
 			if modSinceTime > time.mktime(lastModTime):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
@@ -83,7 +84,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
 		retHeaders['Content-Type'] = mime
 		retHeaders['Content-Length'] = os.path.getsize(fullFilePath)
-		retHeaders['Last-Modified'] = time.strftime("%a, %m %b %Y %H:%M:%S %Z", lastModTime)
+		retHeaders['Last-Modified'] = time.strftime(GMT, lastModTime)
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
@@ -110,14 +111,10 @@ def handleHead(clientSocket, address, target, headers):
 def handlePost(clientSocket, address, target, headers):
 	print("POST NOT YET IMPLEMENTED")
 
-def getUriName(target):
-	# TO IMPLEMENT
-	return target
-
 def getResource(uri):
 	# return mime type and file descriptor
-	filePath = getUriName(uri)
-	tmpPath = CONFIGURATION['DOCUMENT_ROOT']+getUriName(uri)
+	filePath = uri
+	tmpPath = CONFIGURATION['DOCUMENT_ROOT']+uri
 	status = STATUS_CODES['OK']
 	mime = 'text/html'
 	ftype = True	
@@ -151,7 +148,6 @@ def getResource(uri):
 	else:
 		(a, b) = mimetypes.guess_type(uri)
 		mime = a
-	#fileD = open(CONFIGURATION['DOCUMENT_ROOT']+uri, 'r')
 	return  status, ftype, filePath, mime
 
 def sendGenericHeaders(socket):
@@ -217,7 +213,6 @@ if __name__ == '__main__':
 	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	server.bind((CONFIGURATION['HOST'], CONFIGURATION['PORT']))
 	server.listen(5)
-	server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	# main loop that accepts http requests
 	while True:
 		thread.start_new_thread(handleRequest, server.accept())
