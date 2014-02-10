@@ -94,6 +94,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		retHeaders['Content-Type'] = 'text/html'
+		retHeaders['Content-Length'] = getDirectoryListSize(filePath, headers['Host'])
+		sendSpecialHeaders(clientSocket, retHeaders)
 		sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
@@ -106,7 +108,6 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, fullFilePath)
 	clientSocket.send(b'\r\n')
-	#print("**END**")
 
 def handleHead(clientSocket, address, target, headers):
 	handleGet(clientSocket, address, target, headers, True)
@@ -193,6 +194,19 @@ def sendDirectoryListing(socket, filePath, host):
 		else:
 			socket.send(bytes('<li><a href="'+file+'">'+file+'</a></li>','utf-8'))
 	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-bottom.html')
+	
+def getDirectoryListSize(filePath, host):
+	counter = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/dir-list-top.html') + os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/dir-list-bottom.html')
+	if not filePath[-1] == '/':
+		filePath = filePath + '/'
+	if filePath != '/':
+		counter = counter + len(bytes('<li><a href=..>PARENT DIR</a></li>','utf-8'))
+	for file in os.listdir(CONFIGURATION['DOCUMENT_ROOT']+filePath):
+		if os.path.isdir(CONFIGURATION['DOCUMENT_ROOT']+filePath+file):			
+			counter = counter + len(bytes('<li><a href="'+file+'/">'+file+'</a></li>','utf-8'))
+		else:
+			counter = counter + len(bytes('<li><a href="'+file+'">'+file+'</a></li>','utf-8'))
+	return counter
 	
 def notImplemented(socket):
 	retHeaders = {}
