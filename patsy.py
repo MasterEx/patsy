@@ -52,7 +52,10 @@ def handleRequest(clientSocket, address):
 	try:
 		requestHandler[method](clientSocket, address, target, headers)
 	except KeyError:
-		notImplemented(clientSocket)
+		try:
+			notImplemented(clientSocket)
+		except BrokenPipeError:
+			print('BROKEN PIPE - DO NOTHING')
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	# parse GET url arguments
@@ -107,6 +110,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, fullFilePath)
+		#else:
+		#	clientSocket.send(b'\n')
 	clientSocket.send(b'\r\n')
 
 def handleHead(clientSocket, address, target, headers):
@@ -166,7 +171,6 @@ def sendSpecialHeaders(socket, headers):
 	for k, v in headers.items():
 		socket.send(b'\n')
 		socket.send(bytes(k+": "+str(v),'utf-8'))
-	socket.send(b'\n')
 
 def sendMessageBody(socket, status, path, mime, ftype):
 	socket.send(b'\r\n\n')
@@ -182,7 +186,7 @@ def sendStatusBody(socket, status, originalFilePath=''):
 	sendMessageBody(socket, status, filePath, "text/html", 1)
 	
 def sendDirectoryListing(socket, filePath, host):
-	socket.send(b'\r\n\n')
+	socket.send(b'\n\r\n\n')
 	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-top.html')
 	if not filePath[-1] == '/':
 		filePath = filePath + '/'
