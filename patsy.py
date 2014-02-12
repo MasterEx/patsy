@@ -31,6 +31,12 @@ STATUS_CODES = {
 	'NOT_IMPLEMENTED' : '501 Not Implemented'
 }
 
+GLOBAL_REPLACES = {
+	'HTTP_VERSION' : CONFIGURATION['HTTP_VERSION'],
+	'SERVER' : CONFIGURATION['SERVER'],
+	'FROM' : CONFIGURATION['FROM']
+}
+
 def handleRequest(clientSocket, address):
 	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode("utf-8")
 	lines = list(request.splitlines())
@@ -96,20 +102,30 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
-		retHeaders['Content-Type'] = 'text/html'
+		retHeaders['Content-Type'] = 'text/html;charset=iso-8859-1'
 		retHeaders['Content-Length'] = getDirectoryListSize(filePath, headers['Host'])
 		sendSpecialHeaders(clientSocket, retHeaders)
 		sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
 		retHeaders['Content-Type'] = mime
-		if not onlyHead:
-			retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html') # in future, wrong cause of substitutions!
+		t = time.strftime(GMT, time.gmtime())
+		host, port = headers['Host'].split(':')
+		replaces = {
+			'DATE' : t,
+			'CLIENT_ADDRESS' : address,
+			'HOST' : host,
+			'PORT' : port,
+			'TARGET' : target
+		}
+		replaces.update(GLOBAL_REPLACES)
+		if not onlyHead:			
+			retHeaders['Content-Length'] = getStatusMsgSize(status, replaces)
 		if status[0] == '2' or status[0] == '3':
 			retHeaders['Location'] = 'http://'+headers['Host']+filePath
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
-			sendStatusBody(clientSocket, status, fullFilePath)
+			sendStatusBody(clientSocket, status, replaces, fullFilePath)
 		#else:
 		#	clientSocket.send(b'\n')
 	clientSocket.send(b'\r\n')
@@ -139,7 +155,6 @@ def getResource(uri):
 		mime = 'text/html'
 		status = STATUS_CODES['MOVED_PERMANENTLY']		
 	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
-		print("GET RESOURCE IN HERE!")
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(tmpPath):
 		#it's a dir, return file listing
@@ -157,7 +172,7 @@ def getResource(uri):
 
 def sendGenericHeaders(socket):
 	socket.send(b'\n')
-	socket.send(bytes("Date: "+time.strftime("%a, %m %b %Y %H:%M:%S %Z", time.gmtime()),'utf-8'))
+	socket.send(bytes("Date: "+time.strftime(GMT, time.gmtime()),'utf-8'))
 	socket.send(b'\n')
 	socket.send(bytes("Server: "+CONFIGURATION['SERVER'],'utf-8'))
 	try:
@@ -181,12 +196,17 @@ def sendBinaryFile(socket, path):
 		for line in f:
 			socket.send(line)
 
-def sendStatusBody(socket, status, originalFilePath=''):
+def sendStatusBody(socket, status, replaces, originalFilePath=''):
+	socket.send(b'\r\n\n')
 	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
-	sendMessageBody(socket, status, filePath, "text/html", 1)
+	#sendMessageBody(socket, status, filePath, "text/html", 1)
+	with open(filePath, 'rb') as f:
+		for line in f:
+			l = replaceLine(line, replaces)
+			socket.send(l)
 	
 def sendDirectoryListing(socket, filePath, host):
-	socket.send(b'\n\r\n\n')
+	socket.send(b'\n\r\n')
 	sendBinaryFile(socket, CONFIGURATION['MESSAGES_PATH']+'/dir-list-top.html')
 	if not filePath[-1] == '/':
 		filePath = filePath + '/'
@@ -211,6 +231,19 @@ def getDirectoryListSize(filePath, host):
 		else:
 			counter = counter + len(bytes('<li><a href="'+file+'">'+file+'</a></li>','utf-8'))
 	return counter
+	
+def getStatusMsgSize(status, replaces):
+	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
+	counter = 0
+	with open(filePath, 'rb') as f:
+		for line in f:
+			counter = counter + len(replaceLine(line, replaces))
+	return counter
+
+def replaceLine(line, replaces):
+	for key, replace in replaces.items():
+		line = bytes(line.decode('utf8').replace('**'+str(key)+'**', str(replace)), 'utf8') # that seems prety slow :/
+	return line
 	
 def notImplemented(socket):
 	retHeaders = {}
