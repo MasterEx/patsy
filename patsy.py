@@ -27,6 +27,7 @@ STATUS_CODES = {
 	'NOT_FOUND' : '404 Not Found',
 	'MOVED_PERMANENTLY' : '301 Moved Permanently',
 	'NOT_MODIFIED' : '304 Not Modified',
+	'AUTHORIZATION' : '401 Authorization',
 	'FORBIDDEN' : '403 Forbidden',
 	'NOT_IMPLEMENTED' : '501 Not Implemented'
 }
@@ -102,7 +103,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
-		retHeaders['Content-Type'] = 'text/html;charset=iso-8859-1'
+		retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
 		retHeaders['Content-Length'] = getDirectoryListSize(filePath, headers['Host'])
 		sendSpecialHeaders(clientSocket, retHeaders)
 		sendDirectoryListing(clientSocket, filePath, headers['Host'])
@@ -134,7 +135,21 @@ def handleHead(clientSocket, address, target, headers):
 	handleGet(clientSocket, address, target, headers, True)
 	
 def handlePost(clientSocket, address, target, headers):
-	print("POST NOT YET IMPLEMENTED")
+	status = STATUS_CODES['NOT_IMPLEMENTED']
+	t = time.strftime(GMT, time.gmtime())
+	host, port = headers['Host'].split(':')
+	replaces = {
+		'DATE' : t,
+		'CLIENT_ADDRESS' : address,
+		'HOST' : host,
+		'PORT' : port,
+		'TARGET' : target
+	}
+	replaces.update(GLOBAL_REPLACES)
+	handleGet(clientSocket, address, target, headers, True)	
+	retHeaders['Content-Length'] = getStatusMsgSize(status, replaces)
+	sendSpecialHeaders(clientSocket, retHeaders)
+	sendStatusBody(clientSocket, status, replaces, fullFilePath)
 
 def getResource(uri):
 	# return mime type and file descriptor
