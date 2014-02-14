@@ -1,0 +1,5 @@
+{
+	"accesslist" : [
+		{"relative_path" : "den", "authname" : "RESTRICTED","recursive" : true , "username" : "admin" , "password" : "pass"}
+	]
+}
