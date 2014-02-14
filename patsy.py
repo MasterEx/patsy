@@ -4,6 +4,8 @@ import _thread as thread
 import mimetypes
 import os
 import time
+import json
+import base64
 
 TAB = b'\t'.decode("utf-8")
 CRLF = b'\r\n'.decode("utf-8")
@@ -19,7 +21,8 @@ CONFIGURATION = {
 	'MESSAGES_PATH' : 'messages', # use full path
 	'SERVER' : 'patsy/0.1',
 	'FROM' : '', # if empty or None don't send
-	'DEFAULT_INDEX' : ('index.html',) # can specify more than one, live the tuple empty if don't want any
+	'DEFAULT_INDEX' : ('index.html',), # can specify more than one, live the tuple empty if don't want any
+	'ACCESSLIST' : 'accesslist.json' # full path
 }
 
 STATUS_CODES = {
@@ -78,6 +81,15 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
 	fullFilePath = CONFIGURATION['DOCUMENT_ROOT']+filePath
+	authorization = checkAuthorization(target)
+	if authorization:
+		try:
+			user, password = str(base64.b64decode(headers['Authorization'].split()[1])).split(':',1)
+			if authorization['username'] == user and authorization['password'] == password:
+				authorization = None
+		except (KeyError, ValueError) as ex:
+			print('>>>> EXCEPT ')
+			status = STATUS_CODES['AUTHORIZATION']
 	if status == STATUS_CODES['OK']:
 		try:
 			lastModTime = time.gmtime(os.path.getmtime(fullFilePath))
@@ -109,7 +121,9 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
-		retHeaders['Content-Type'] = mime
+		retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
+		if authorization:
+			retHeaders['WWW-Authenticate'] = 'Basic realm="'+authorization['authname']+'"'
 		t = time.strftime(GMT, time.gmtime())
 		host, port = headers['Host'].split(':')
 		replaces = {
@@ -260,6 +274,14 @@ def replaceLine(line, replaces):
 		line = bytes(line.decode('utf8').replace('**'+str(key)+'**', str(replace)), 'utf8') # that seems prety slow :/
 	return line
 	
+def checkAuthorization(filePath):
+	for entry in ACCESSLIST['accesslist']:
+		if entry['relative_path'] == filePath:
+			return entry			
+		elif entry['recursive'] and entry['relative_path']+'/' in filePath:
+			return entry
+	return None
+	
 def notImplemented(socket):
 	retHeaders = {}
 	retHeaders['Content-Type'] = 'text/html'
@@ -274,6 +296,7 @@ requestHandler = {
 }
 
 if __name__ == '__main__':
+	ACCESSLIST = json.load(open(CONFIGURATION['ACCESSLIST'], 'r'))
 	# initialize server socket
 	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	server.bind((CONFIGURATION['HOST'], CONFIGURATION['PORT']))
