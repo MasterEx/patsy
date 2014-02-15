@@ -84,11 +84,13 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	authorization = checkAuthorization(target)
 	if authorization:
 		try:
-			user, password = str(base64.b64decode(headers['Authorization'].split()[1])).split(':',1)
+			user, password = base64.b64decode(headers['Authorization'].split()[1]).decode('utf8').split(':',1)
 			if authorization['username'] == user and authorization['password'] == password:
 				authorization = None
+			else:
+				status = STATUS_CODES['AUTHORIZATION']				
 		except (KeyError, ValueError) as ex:
-			print('>>>> EXCEPT ')
+			print('EXCEPT')
 			status = STATUS_CODES['AUTHORIZATION']
 	if status == STATUS_CODES['OK']:
 		try:
@@ -141,8 +143,6 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
 			sendStatusBody(clientSocket, status, replaces, fullFilePath)
-		#else:
-		#	clientSocket.send(b'\n')
 	clientSocket.send(b'\r\n')
 
 def handleHead(clientSocket, address, target, headers):
