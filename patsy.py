@@ -112,7 +112,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 				f.close()
 			except PermissionError:
 				status = STATUS_CODES['FORBIDDEN']
-	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
+	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf8'))
 	sendGenericHeaders(clientSocket)
 	if status == STATUS_CODES['OK'] and ftype:
 		# SEND A (TEXT OR BINARY) FILE - NO ERROR
@@ -127,7 +127,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
 		retHeaders['Content-Length'] = getDirectoryListSize(filePath, headers['Host'])
 		sendSpecialHeaders(clientSocket, retHeaders)
-		sendDirectoryListing(clientSocket, filePath, headers['Host'])
+		if not onlyHead:
+			sendDirectoryListing(clientSocket, filePath, headers['Host'])
 	elif status != STATUS_CODES['NOT_MODIFIED']:
 		# SOME KIND OF ERROR OR STATUS CODE
 		retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
@@ -153,9 +154,11 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 	clientSocket.send(b'\r\n')
 
 def handleHead(clientSocket, address, target, headers):
+	# HEAD assumes a GET request
 	handleGet(clientSocket, address, target, headers, True)
 	
 def handlePost(clientSocket, address, target, headers):
+	# POST returns 501 NOT IMPLEMENTED
 	status = STATUS_CODES['NOT_IMPLEMENTED']
 	t = time.strftime(GMT, time.gmtime())
 	host, port = headers['Host'].split(':')
@@ -174,38 +177,33 @@ def handlePost(clientSocket, address, target, headers):
 	sendSpecialHeaders(clientSocket, retHeaders)
 	sendStatusBody(clientSocket, status, replaces)
 
-def getResource(uri):
+def getResource(filePath):
 	# return mime type and file descriptor
-	filePath = uri
-	tmpPath = CONFIGURATION['DOCUMENT_ROOT']+uri
+	tmpPath = CONFIGURATION['DOCUMENT_ROOT']+filePath
 	status = STATUS_CODES['OK']
 	mime = 'text/html'
-	ftype = True	
+	ftype = False
 	if tmpPath[-1] != '/' and os.path.isdir(tmpPath):
 		# it's a dir -> move to path/
 		filePath = filePath+'/'
-		ftype = False
 		for index in CONFIGURATION['DEFAULT_INDEX']:
 			if os.path.isfile(tmpPath+index):
 				filePath = filePath+index
 				ftype = True
 				break
-		mime = 'text/html'
 		status = STATUS_CODES['MOVED_PERMANENTLY']		
 	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(tmpPath):
 		#it's a dir, return file listing
-		mime = 'text/html'
-		ftype = False
 		for index in CONFIGURATION['DEFAULT_INDEX']:
 			if os.path.isfile(tmpPath+index):
 				filePath = filePath+index
 				ftype = True
 				break
 	else:
-		(a, b) = mimetypes.guess_type(uri)
-		mime = a
+		ftype = True
+		mime = mimetypes.guess_type(filePath)[0]
 	return  status, ftype, filePath, mime
 
 def sendGenericHeaders(socket):
