@@ -100,9 +100,16 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
 			print("headers['If-Modified-Since'] not defined")
+		# check if dir/file is forbidden
 		if not ftype:
 			try:
 				os.listdir(CONFIGURATION['DOCUMENT_ROOT']+filePath)
+			except PermissionError:
+				status = STATUS_CODES['FORBIDDEN']
+		else:
+			try:
+				f = open(CONFIGURATION['DOCUMENT_ROOT']+filePath, 'r')
+				f.close()
 			except PermissionError:
 				status = STATUS_CODES['FORBIDDEN']
 	clientSocket.send(bytes(CONFIGURATION['HTTP_VERSION']+" "+status,'utf-8'))
