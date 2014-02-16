@@ -1,15 +1,8 @@
 # An HTTP 1.0 webserver
-import socket
+import socket, mimetypes, os, time, json, base64
 import _thread as thread
-import mimetypes
-import os
-import time
-import json
-import base64
 
 TAB = b'\t'.decode("utf-8")
-CRLF = b'\r\n'.decode("utf-8")
-LF = b'\n'.decode("utf-8")
 GMT = "%a, %m %b %Y %H:%M:%S %Z"
 
 CONFIGURATION = { 
@@ -42,22 +35,30 @@ GLOBAL_REPLACES = {
 }
 
 def handleRequest(clientSocket, address):
-	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode("utf-8")
+	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode('utf8')
 	lines = list(request.splitlines())
-	method = ""
-	target = ""
+	method = ''
+	target = ''
+	mainBody = False
+	body = {} # message body in case of POST, not used yet
 	headers = {}
-	for i in range(0, len(lines)):
-		if method == "" and (lines[i] == CRLF or lines[i] == LF):
+	for line in lines:
+		if method == '' and line == '':
 			continue
-		elif method == "":
-			args = lines[i].replace(TAB, '').split(' ')
+		elif method == '':
+			args = line.replace(TAB, '').split(' ')
 			method = args[0]
 			target = args[1]
-		elif not (lines[i] == '' or lines[i] == CRLF or lines[i] == LF):
-			header, value = lines[i].split(':',1)
+		elif not line == '' and not mainBody:
+			header, value = line.split(':',1)
 			headers[header.strip()] = value.strip()
-		elif lines[i] == CRLF or lines[i] == LF:
+		elif line == '' and method == 'POST':
+			mainBody = True
+		elif mainBody:
+			for l in line.split('&'):
+				k, v = l.split('=')
+				body[k] = v
+		else:
 			break
 	try:
 		requestHandler[method](clientSocket, address, target, headers)
@@ -68,7 +69,7 @@ def handleRequest(clientSocket, address):
 			print('BROKEN PIPE - DO NOTHING')
 		
 def handleGet(clientSocket, address, target, headers, onlyHead=False):
-	# parse GET url arguments
+	# parse GET url arguments for future usage
 	arguments = {}
 	try:
 		target, args = target.split('?',1)
@@ -77,10 +78,10 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			arguments[param] = val
 	except ValueError:
 		print('GET url doesn\'t contain arguments')
-	uri = target
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
 	fullFilePath = CONFIGURATION['DOCUMENT_ROOT']+filePath
+	# check (for) authorization credentials
 	authorization = checkAuthorization(target)
 	if authorization:
 		try:
@@ -90,12 +91,11 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			else:
 				status = STATUS_CODES['AUTHORIZATION']				
 		except (KeyError, ValueError) as ex:
-			print('EXCEPT')
 			status = STATUS_CODES['AUTHORIZATION']
 	if status == STATUS_CODES['OK']:
 		try:
 			lastModTime = time.gmtime(os.path.getmtime(fullFilePath))
-			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], GMT))		
+			modSinceTime = time.mktime(time.strptime(headers['If-Modified-Since'], GMT))
 			if modSinceTime > time.mktime(lastModTime):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
@@ -114,7 +114,7 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 		retHeaders['Last-Modified'] = time.strftime(GMT, lastModTime)
 		sendSpecialHeaders(clientSocket, retHeaders)
 		if not onlyHead:
-			sendMessageBody(clientSocket, status, fullFilePath, mime, ftype)
+			sendMessageBody(clientSocket, fullFilePath)
 	elif status == STATUS_CODES['OK']:
 		# DIRECTORY LISTING
 		retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
@@ -133,10 +133,10 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			'CLIENT_ADDRESS' : address,
 			'HOST' : host,
 			'PORT' : port,
-			'TARGET' : target
+			'TARGET' : filePath
 		}
 		replaces.update(GLOBAL_REPLACES)
-		if not onlyHead:			
+		if not onlyHead:
 			retHeaders['Content-Length'] = getStatusMsgSize(status, replaces)
 		if status[0] == '2' or status[0] == '3':
 			retHeaders['Location'] = 'http://'+headers['Host']+filePath
@@ -160,10 +160,12 @@ def handlePost(clientSocket, address, target, headers):
 		'TARGET' : target
 	}
 	replaces.update(GLOBAL_REPLACES)
-	handleGet(clientSocket, address, target, headers, True)	
+	retHeaders = {}
+	retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
 	retHeaders['Content-Length'] = getStatusMsgSize(status, replaces)
+	sendGenericHeaders(clientSocket)
 	sendSpecialHeaders(clientSocket, retHeaders)
-	sendStatusBody(clientSocket, status, replaces, fullFilePath)
+	sendStatusBody(clientSocket, status, replaces)
 
 def getResource(uri):
 	# return mime type and file descriptor
@@ -216,7 +218,7 @@ def sendSpecialHeaders(socket, headers):
 		socket.send(b'\n')
 		socket.send(bytes(k+": "+str(v),'utf-8'))
 
-def sendMessageBody(socket, status, path, mime, ftype):
+def sendMessageBody(socket, path):
 	socket.send(b'\r\n\n')
 	sendBinaryFile(socket, path)
 			
@@ -228,7 +230,6 @@ def sendBinaryFile(socket, path):
 def sendStatusBody(socket, status, replaces, originalFilePath=''):
 	socket.send(b'\r\n\n')
 	filePath = CONFIGURATION['MESSAGES_PATH']+'/'+status[:3]+'.html'
-	#sendMessageBody(socket, status, filePath, "text/html", 1)
 	with open(filePath, 'rb') as f:
 		for line in f:
 			l = replaceLine(line, replaces)
