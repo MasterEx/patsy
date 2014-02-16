@@ -195,7 +195,7 @@ def getResource(filePath):
 	elif not (os.path.isfile(tmpPath) or os.path.isdir(tmpPath)):
 		status = STATUS_CODES['NOT_FOUND']
 	elif os.path.isdir(tmpPath):
-		#it's a dir, return file listing
+		# it's a dir, return file listing
 		for index in CONFIGURATION['DEFAULT_INDEX']:
 			if os.path.isfile(tmpPath+index):
 				filePath = filePath+index
@@ -289,9 +289,17 @@ def checkAuthorization(filePath):
 	return None
 	
 def notImplemented(socket):
+	replaces = {
+		'DATE' : t,
+		'CLIENT_ADDRESS' : address,
+		'HOST' : host,
+		'PORT' : port,
+		'TARGET' : target
+	}
+	replaces.update(GLOBAL_REPLACES)
 	retHeaders = {}
 	retHeaders['Content-Type'] = 'text/html'
-	retHeaders['Content-Length'] = os.path.getsize(CONFIGURATION['MESSAGES_PATH']+'/501.html') # in future, wrong cause of substitutions!
+	retHeaders['Content-Length'] = getStatusMsgSize(status, replaces)
 	sendSpecialHeaders(socket, retHeaders)
 	sendStatusBody(socket, STATUS_CODES['NOT_IMPLEMENTED'])
 
