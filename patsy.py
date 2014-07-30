@@ -8,7 +8,7 @@ GMT = "%a, %m %b %Y %H:%M:%S %Z"
 CONFIGURATION = { 
 	'HOST' : '0.0.0.0', # bind to all available interfaces
 	'PORT' : 31338,
-	'MAX_REQUEST' : 1024 * 1,  # 1 MB, more than enough!
+	'MAX_REQUEST' : 1024 * 4,  # 4 KB should be ok
 	'DOCUMENT_ROOT' : 'htdocs', # should use full path
 	'HTTP_VERSION' : 'HTTP/1.0',
 	'MESSAGES_PATH' : 'messages', # use full path
@@ -23,8 +23,10 @@ STATUS_CODES = {
 	'NOT_FOUND' : '404 Not Found',
 	'MOVED_PERMANENTLY' : '301 Moved Permanently',
 	'NOT_MODIFIED' : '304 Not Modified',
+	'BAD_REQUEST' : '400 Bad Request',
 	'AUTHORIZATION' : '401 Authorization',
 	'FORBIDDEN' : '403 Forbidden',
+	'REQUEST_LARGE' : '413 Request Entity Too Large', # HTTP 1.1 status code
 	'NOT_IMPLEMENTED' : '501 Not Implemented'
 }
 
@@ -36,6 +38,20 @@ GLOBAL_REPLACES = {
 
 def handleRequest(clientSocket, address):
 	request = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode('utf8')
+	if len(request) == CONFIGURATION['MAX_REQUEST']:
+		try:
+			clientSocket.settimeout(1)
+			r = clientSocket.recv(CONFIGURATION['MAX_REQUEST']).decode('utf8')
+			if len(r) > 1:
+				clientSocket.settimeout(60)
+				retHeaders = {}
+				retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
+				sendSpecialHeaders(clientSocket, retHeaders)
+				sendStatusBody(clientSocket, STATUS_CODES['REQUEST_LARGE'], {})
+				clientSocket.close()
+				return None
+		except socket.timeout:
+			pass
 	lines = list(request.splitlines())
 	method = ''
 	target = ''
@@ -50,8 +66,16 @@ def handleRequest(clientSocket, address):
 			method = args[0]
 			target = args[1]
 		elif not line == '' and not mainBody:
-			header, value = line.split(':',1)
-			headers[header.strip()] = value.strip()
+			try:
+				header, value = line.split(':',1)
+				headers[header.strip()] = value.strip()
+			except Exception:
+				# This isn't tested but is seems OK...
+				retHeaders = {}
+				retHeaders['Content-Type'] = 'text/html; charset=iso-8859-1'
+				sendSpecialHeaders(clientSocket, retHeaders)
+				sendStatusBody(clientSocket, STATUS_CODES['BAD_REQUEST'], {})
+				return None
 		elif line == '' and method == 'POST':
 			mainBody = True
 		elif mainBody:
@@ -77,7 +101,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			param, val = i.split('=',1)
 			arguments[param] = val
 	except ValueError:
-		print('GET url doesn\'t contain arguments')
+		#print('GET url doesn\'t contain arguments')
+		pass
 	retHeaders = {}
 	status, ftype, filePath, mime = getResource(target)
 	fullFilePath = CONFIGURATION['DOCUMENT_ROOT']+filePath
@@ -99,7 +124,8 @@ def handleGet(clientSocket, address, target, headers, onlyHead=False):
 			if modSinceTime > time.mktime(lastModTime):
 				status = STATUS_CODES['NOT_MODIFIED']
 		except KeyError:
-			print("headers['If-Modified-Since'] not defined")
+			# print("headers['If-Modified-Since'] not defined")
+			pass
 		# check if dir/file is forbidden
 		if not ftype:
 			try:
